@@ -94,9 +94,11 @@ app.use((req, res, next) => {
 });
 
 function requireToken(req, res, next) {
-  const token = req.header('X-Print-Token');
-  if (!config.apiToken || token !== config.apiToken) {
-    return res.status(401).json({ ok: false, error: 'Geçersiz veya eksik X-Print-Token' });
+  const token = (req.header('X-Print-Token') || '').trim();
+  const validToken = (config.apiToken || '').trim();
+  if (!validToken || token !== validToken) {
+    console.log(`[AUTH HATA] Gelen Token: "${token}", Beklenen Token: "${validToken}"`);
+    return res.status(401).json({ ok: false, error: `Geçersiz veya eksik X-Print-Token (Gelen: ${token.substring(0,6)}...)` });
   }
   next();
 }
