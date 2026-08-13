@@ -46,17 +46,15 @@ function loadConfig() {
       'http://localhost:8080',
       'http://127.0.0.1:8080'
     ],
-    // İlk çalıştırmada otomatik üretilir, frontend'de de aynısı saklanmalı.
-    apiToken: null
+    // Her zaman koddaki sabit token'ı kullan
+    apiToken: '007419f30b350f3bb329c9ba48bb30e93ae50981744c4737'
   };
   if (fs.existsSync(CONFIG_PATH)) {
     const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
     return { ...defaults, ...saved };
   }
-  defaults.apiToken = crypto.randomBytes(24).toString('hex');
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaults, null, 2));
   console.log('[config] Yeni config.json oluşturuldu. API token:', defaults.apiToken);
-  console.log('[config] Bu token\'ı Cargobar > Ayarlar > Yazıcı Ajanı bölümüne girin.');
   return defaults;
 }
 
