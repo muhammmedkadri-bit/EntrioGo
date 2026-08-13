@@ -30,7 +30,7 @@ svc.on('install', () => {
   svc.start();
 });
 svc.on('start', () => {
-  console.log('CargobarPrintAgent servisi çalışıyor. http://localhost:9198/health adresinden kontrol edebilirsiniz.');
+  console.log('CargobarPrintAgent servisi çalışıyor. https://localhost:9198/health adresinden kontrol edebilirsiniz.');
 });
 svc.on('alreadyinstalled', () => console.log('Servis zaten kurulu.'));
 

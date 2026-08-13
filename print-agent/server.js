@@ -23,6 +23,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const https = require('https');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 
@@ -174,7 +175,23 @@ app.post('/test/:lang', requireToken, (req, res) => {
   });
 });
 
-app.listen(config.port, () => {
-  console.log(`Cargobar Print Agent çalışıyor: http://localhost:${config.port}`);
+// HTTPS: 30 yıl geçerli sertifika ile güvenli bağlantı
+const certPath = path.join(__dirname, 'server.crt');
+const keyPath  = path.join(__dirname, 'server.key');
+
+if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+  console.error('[HATA] server.crt veya server.key bulunamadı!');
+  console.error('Lütfen proje kökündeki sertifika üretme adımını tekrar çalıştırın.');
+  process.exit(1);
+}
+
+const httpsOptions = {
+  cert: fs.readFileSync(certPath),
+  key:  fs.readFileSync(keyPath),
+};
+
+https.createServer(httpsOptions, app).listen(config.port, () => {
+  console.log(`EntrioGo Print Agent çalışıyor: https://localhost:${config.port}`);
   console.log(`API Token: ${config.apiToken}`);
+  console.log(`Mobil cihaz için CA sertifikasını yükleyin: ca.crt (veya mobil-sertifika.pem)`);
 });
