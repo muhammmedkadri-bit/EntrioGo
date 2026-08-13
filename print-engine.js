@@ -33,7 +33,7 @@ function getSetting(key, fallback) {
 const Settings = {
   get agentUrl() { return getSetting(LS_KEYS.agentUrl, 'https://192.168.1.156:9198'); },
   set agentUrl(v) { localStorage.setItem(LS_KEYS.agentUrl, v); },
-  get agentToken() { return getSetting(LS_KEYS.agentToken, 'c53eda589f6c766615eaa44d75e0d6bca1e06cc9bd36fbe6'); },
+  get agentToken() { return getSetting(LS_KEYS.agentToken, '007419f30b350f3bb329c9ba48bb30e93ae50981744c4737'); },
   set agentToken(v) { localStorage.setItem(LS_KEYS.agentToken, v); },
   get labelLang() { return getSetting(LS_KEYS.labelLang, 'tspl'); },
   set labelLang(v) { localStorage.setItem(LS_KEYS.labelLang, v); }
