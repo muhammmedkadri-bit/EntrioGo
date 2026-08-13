@@ -1,6 +1,4 @@
 print-agent/config.json
 node_modules/
 .DS_Store
-# Özel anahtarlar asla commit edilmez (sertifikalar/public crt güvenli)
-*.key
 server.csr
