@@ -177,7 +177,7 @@ const Store = {
       return;
     }
     try {
-      const { error } = await _db.from('customers').upsert(customer);
+      const { error } = await _db.from('customers').upsert(customer, { onConflict: 'id' });
       if (error) throw error;
       Toast.show('Müşteri başarıyla kaydedildi.', 'success');
     } catch (err) {
@@ -920,7 +920,7 @@ const App = {
         id: 'cust-' + Date.now(),
         unvan: c.unvan, ad: c.ad, telefon: c.telefon,
         adres: c.adres, ilce: c.ilce, il: c.il,
-        kod: 'M-' + (State.customers.length + 10001),
+        kod: 'M-' + Date.now() + Math.floor(Math.random() * 1000),
       };
       // State.customers.push is done inside Store.saveCustomer
       await Store.saveCustomer(savedCust);
@@ -1078,7 +1078,7 @@ const App = {
       if (idx !== -1) State.customers[idx] = { ...State.customers[idx], ...data };
     } else {
       data.id  = 'cust-' + Date.now();
-      data.kod = data.kod || ('M-' + (State.customers.length + 10001));
+      data.kod = data.kod || ('M-' + Date.now() + Math.floor(Math.random() * 1000));
       State.customers.unshift(data); // Add to top locally
     }
 
