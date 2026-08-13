@@ -38,6 +38,8 @@ function loadConfig() {
     // Bu siteler dışından gelen istekler reddedilir (güvenlik).
     allowedOrigins: [
       'https://cargobar.vercel.app',
+      'https://entrigo.vercel.app',
+      'https://entriogo.vercel.app',
       'http://localhost:5500',
       'http://127.0.0.1:5500',
       'http://localhost:3000',
@@ -62,22 +64,34 @@ const config = loadConfig();
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 
-// Chrome Private Network Access (PNA) politikası için gerekli header.
-// Tarayıcı, public bir siteden (https://...) localhost'a istek atarken
-// preflight (OPTIONS) isteğinde bu header cors'tan ÖNCE set edilmeli.
+// Chrome Private Network Access (PNA) + CORS preflight
+// OPTIONS isteği geldiğinde token kontrolü olmadan direkt izin ver.
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // curl/Postman
+  if (config.allowedOrigins.includes(origin)) return true;
+  if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) return true;
+  // Vercel preview deploy'ları için esneklik (örn: entrigo-xyz-abc.vercel.app)
+  if (origin.endsWith('.vercel.app')) return true;
+  return false;
+}
+
 app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && isAllowedOrigin(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Print-Token, Access-Control-Request-Private-Network');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  // OPTIONS preflight — token kontrolü YOK, anında 204 dön
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  // Origin kontrolü (GET/POST için)
+  if (origin && !isAllowedOrigin(origin)) {
+    return res.status(403).json({ ok: false, error: 'İzinsiz origin: ' + origin });
+  }
   next();
 });
-
-// --- Güvenlik: sadece izinli origin'lerden ve doğru token ile istek kabul et ---
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/test için
-    if (config.allowedOrigins.includes(origin) || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) return cb(null, true);
-    return cb(new Error('İzinsiz origin: ' + origin));
-  }
-}));
 
 function requireToken(req, res, next) {
   const token = req.header('X-Print-Token');
