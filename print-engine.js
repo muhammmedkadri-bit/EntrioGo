@@ -390,7 +390,7 @@ async function buildLabel(data, customTemplateBase64, copies) {
       drawText(recName, 46, 335, { size: recNameSize, weight: 'bold' });
       
       // 2.2. Adres + Lokasyon Pini İkonu
-      let recY = 335 + recNameSize + 16;
+      let recY = 335 + recNameSize + 21;
       if (pinImg) ctx.drawImage(pinImg, 16, recY, 24, 24);
       recY = drawWrapped(alici?.adres || '', 46, recY, 330, 24, 'normal', 30);
       
