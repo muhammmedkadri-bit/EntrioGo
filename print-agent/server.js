@@ -23,7 +23,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const https = require('https');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 
@@ -38,23 +37,23 @@ function loadConfig() {
     // Bu siteler dışından gelen istekler reddedilir (güvenlik).
     allowedOrigins: [
       'https://cargobar.vercel.app',
-      'https://entrigo.vercel.app',
-      'https://entriogo.vercel.app',
       'http://localhost:5500',
       'http://127.0.0.1:5500',
       'http://localhost:3000',
       'http://localhost:8080',
       'http://127.0.0.1:8080'
     ],
-    // Her zaman koddaki sabit token'ı kullan
-    apiToken: '007419f30b350f3bb329c9ba48bb30e93ae50981744c4737'
+    // İlk çalıştırmada otomatik üretilir, frontend'de de aynısı saklanmalı.
+    apiToken: null
   };
   if (fs.existsSync(CONFIG_PATH)) {
     const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
     return { ...defaults, ...saved };
   }
+  defaults.apiToken = crypto.randomBytes(24).toString('hex');
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaults, null, 2));
   console.log('[config] Yeni config.json oluşturuldu. API token:', defaults.apiToken);
+  console.log('[config] Bu token\'ı Cargobar > Ayarlar > Yazıcı Ajanı bölümüne girin.');
   return defaults;
 }
 
@@ -62,41 +61,59 @@ const config = loadConfig();
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 
-// Chrome Private Network Access (PNA) + CORS preflight
-// OPTIONS isteği geldiğinde token kontrolü olmadan direkt izin ver.
-function isAllowedOrigin(origin) {
-  if (!origin) return true; // curl/Postman
-  if (config.allowedOrigins.includes(origin)) return true;
-  if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) return true;
-  // Vercel preview deploy'ları için esneklik (örn: entrigo-xyz-abc.vercel.app)
-  if (origin.endsWith('.vercel.app')) return true;
-  return false;
+// ────────────────────────────────────────────────────────────────
+// CORS + Chrome Private Network Access (PNA) middleware
+// Chrome, public HTTPS sitesinden yerel IP'ye istek atarken
+// iki aşamalı preflight gönderir:
+//   1. OPTIONS isteği → Access-Control-Allow-Private-Network: true içermeli
+//   2. Asıl istek
+// Bu yüzden OPTIONS isteği cors() middleware'den ÖNCE yakalanmalı.
+// ────────────────────────────────────────────────────────────────
+const CORS_HEADERS = {
+  'Access-Control-Allow-Private-Network': 'true',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Print-Token, Access-Control-Request-Private-Network',
+  'Access-Control-Allow-Credentials': 'true',
+};
+
+function getAllowedOrigin(origin) {
+  if (!origin) return '*';
+  if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') ||
+      origin.startsWith('https://localhost') || origin.startsWith('https://127.0.0.1')) return origin;
+  if (config.allowedOrigins.includes(origin)) return origin;
+  if (origin.startsWith('https://')) return origin; // Güvenlik API token ile sağlanıyor
+  return null; // HTTP yabancı origin → reddet
 }
 
+// Tüm isteklere origin header'ı ekle
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && isAllowedOrigin(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
+  const origin = req.headers['origin'];
+  const allowed = getAllowedOrigin(origin);
+
+  if (allowed) {
+    res.setHeader('Access-Control-Allow-Origin', allowed);
+    if (allowed !== '*') res.setHeader('Vary', 'Origin');
   }
+
+  // PNA header'ı her zaman ekle (OPTIONS için zorunlu)
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Print-Token, Access-Control-Request-Private-Network');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  // OPTIONS preflight — token kontrolü YOK, anında 204 dön
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  // Origin kontrolü (GET/POST için)
-  if (origin && !isAllowedOrigin(origin)) {
-    return res.status(403).json({ ok: false, error: 'İzinsiz origin: ' + origin });
+
+  // OPTIONS preflight → diğer header'ları ekle ve hemen bitir
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', CORS_HEADERS['Access-Control-Allow-Methods']);
+    res.setHeader('Access-Control-Allow-Headers', CORS_HEADERS['Access-Control-Allow-Headers']);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    return res.status(204).end();
   }
+
   next();
 });
 
 function requireToken(req, res, next) {
-  const token = (req.header('X-Print-Token') || '').trim();
-  const validToken = (config.apiToken || '').trim();
-  if (!validToken || token !== validToken) {
-    console.log(`[AUTH HATA] Gelen Token: "${token}", Beklenen Token: "${validToken}"`);
-    return res.status(401).json({ ok: false, error: `Geçersiz veya eksik X-Print-Token (Gelen: ${token.substring(0,6)}...)` });
+  const token = req.header('X-Print-Token');
+  if (!config.apiToken || token !== config.apiToken) {
+    return res.status(401).json({ ok: false, error: 'Geçersiz veya eksik X-Print-Token' });
   }
   next();
 }
@@ -132,10 +149,80 @@ function printBuffer(buffer, cb) {
   fs.writeFileSync(tmpFile, buffer);
 
   if (process.platform === 'win32') {
-    const target = `\\\\localhost\\${config.windowsShareName}`;
-    execFile('cmd.exe', ['/c', 'copy', '/b', tmpFile, target], (err, stdout, stderr) => {
+    // Yazıcı adını config'den al (paylaşım adı değil, kurulu yazıcı adı)
+    const printerName = config.windowsPrinterName || config.windowsShareName || 'Etiket Yazıcı';
+    
+    // PowerShell ile doğrudan RAW yazdırma — Print Spooler paylaşım yoluna gerek yok
+    const psScript = `
+$printerName = '${printerName.replace(/'/g, "''")}';
+$tmpFile = '${tmpFile.replace(/\\/g, '\\\\')}';
+Add-Type -AssemblyName System.Drawing;
+$pd = New-Object System.Drawing.Printing.PrintDocument;
+$pd.PrinterSettings.PrinterName = $printerName;
+$pd.PrinterSettings.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('Custom', 394, 394);
+$rawData = [System.IO.File]::ReadAllBytes($tmpFile);
+$sent = $false;
+$pd.add_PrintPage({
+  param($sender, $e)
+  if (-not $sent) {
+    $sent = $true;
+    $e.Cancel = $true;
+  }
+});
+# RAW yazdırma için doğrudan spooler API kullan
+$pinvoke = @'
+using System;
+using System.Runtime.InteropServices;
+public class RawPrinter {
+  [DllImport("winspool.Drv", EntryPoint="OpenPrinterA", SetLastError=true, CharSet=CharSet.Ansi)]
+  public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+  [DllImport("winspool.Drv", EntryPoint="ClosePrinter", SetLastError=true)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", EntryPoint="StartDocPrinterA", SetLastError=true, CharSet=CharSet.Ansi)]
+  public static extern int StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+  [DllImport("winspool.Drv", EntryPoint="EndDocPrinter", SetLastError=true)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", EntryPoint="StartPagePrinter", SetLastError=true)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", EntryPoint="EndPagePrinter", SetLastError=true)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", EntryPoint="WritePrinter", SetLastError=true)]
+  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, int dwCount, out int dwWritten);
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]
+  public class DOCINFOA { public string pDocName; public string pOutputFile; public string pDataType; }
+  public static bool SendBytesToPrinter(string printerName, byte[] bytes) {
+    IntPtr hPrinter; int written;
+    if (!OpenPrinter(printerName, out hPrinter, IntPtr.Zero)) return false;
+    var di = new DOCINFOA { pDocName="CargobarLabel", pOutputFile=null, pDataType="RAW" };
+    if (StartDocPrinter(hPrinter, 1, di) == 0) { ClosePrinter(hPrinter); return false; }
+    StartPagePrinter(hPrinter);
+    IntPtr ptr = Marshal.AllocCoTaskMem(bytes.Length);
+    Marshal.Copy(bytes, 0, ptr, bytes.Length);
+    WritePrinter(hPrinter, ptr, bytes.Length, out written);
+    Marshal.FreeCoTaskMem(ptr);
+    EndPagePrinter(hPrinter);
+    EndDocPrinter(hPrinter);
+    ClosePrinter(hPrinter);
+    return true;
+  }
+}
+'@
+Add-Type -TypeDefinition $pinvoke -Language CSharp;
+$bytes = [System.IO.File]::ReadAllBytes($tmpFile);
+$ok = [RawPrinter]::SendBytesToPrinter($printerName, $bytes);
+Remove-Item $tmpFile -ErrorAction SilentlyContinue;
+if ($ok) { Write-Output 'OK' } else { Write-Error ('RAW print failed for printer: ' + $printerName); exit 1 }
+`.trim();
+
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], { timeout: 15000 }, (err, stdout, stderr) => {
       fs.unlink(tmpFile, () => {});
-      cb(err ? (stderr || err.message) : null);
+      if (err || (stderr && stderr.trim())) {
+        const msg = stderr?.trim() || err?.message || 'Bilinmeyen yazdırma hatası';
+        console.error('[print] Windows RAW hata:', msg);
+        return cb(msg);
+      }
+      console.log('[print] Başarılı:', stdout.trim());
+      cb(null);
     });
   } else {
     execFile('lp', ['-d', config.cupsPrinterName, '-o', 'raw', tmpFile], (err, stdout, stderr) => {
@@ -189,23 +276,13 @@ app.post('/test/:lang', requireToken, (req, res) => {
   });
 });
 
-// HTTPS: 30 yıl geçerli sertifika ile güvenli bağlantı
-const certPath = path.join(__dirname, 'server.crt');
-const keyPath  = path.join(__dirname, 'server.key');
-
-if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
-  console.error('[HATA] server.crt veya server.key bulunamadı!');
-  console.error('Lütfen proje kökündeki sertifika üretme adımını tekrar çalıştırın.');
-  process.exit(1);
-}
-
-const httpsOptions = {
-  cert: fs.readFileSync(certPath),
-  key:  fs.readFileSync(keyPath),
+const https = require('https');
+const options = {
+  key: fs.readFileSync(path.join(__dirname, '192.168.1.156+2-key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, '192.168.1.156+2.pem'))
 };
 
-https.createServer(httpsOptions, app).listen(config.port, () => {
-  console.log(`EntrioGo Print Agent çalışıyor: https://localhost:${config.port}`);
+https.createServer(options, app).listen(config.port, '0.0.0.0', () => {
+  console.log(`Cargobar Print Agent (HTTPS) çalışıyor: https://192.168.1.156:${config.port}`);
   console.log(`API Token: ${config.apiToken}`);
-  console.log(`Mobil cihaz için CA sertifikasını yükleyin: ca.crt (veya mobil-sertifika.pem)`);
 });

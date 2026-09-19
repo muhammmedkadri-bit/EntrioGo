@@ -33,7 +33,7 @@ function getSetting(key, fallback) {
 const Settings = {
   get agentUrl() { return getSetting(LS_KEYS.agentUrl, 'https://192.168.1.156:9198'); },
   set agentUrl(v) { localStorage.setItem(LS_KEYS.agentUrl, v); },
-  get agentToken() { return getSetting(LS_KEYS.agentToken, '007419f30b350f3bb329c9ba48bb30e93ae50981744c4737'); },
+  get agentToken() { return getSetting(LS_KEYS.agentToken, 'c53eda589f6c766615eaa44d75e0d6bca1e06cc9bd36fbe6'); },
   set agentToken(v) { localStorage.setItem(LS_KEYS.agentToken, v); },
   get labelLang() { return getSetting(LS_KEYS.labelLang, 'tspl'); },
   set labelLang(v) { localStorage.setItem(LS_KEYS.labelLang, v); }
@@ -381,20 +381,21 @@ async function buildLabel(data, customTemplateBase64, copies) {
       recY = drawWrapped(alici?.adres || '', 16, recY, 360, 23, 'normal', 28);
       
       if (alici?.tel) {
-        drawText(alici.tel, 16, recY + 9, { size: 21 });
+        drawText(alici.tel, 16, recY + 16, { size: 22, weight: 'bold' });
       }
 
       const cityStr = [alici?.ilce, alici?.il].filter(Boolean).join(' / ').toLocaleUpperCase('tr-TR');
       const cityFontSize = fitFont(cityStr, 360, 32, 22, 'bold');
       drawText(cityStr, 16, 570, { size: cityFontSize, weight: 'bold' });
 
-      // --- 3. DIMENSIONS / ÖLÇÜLER (Turkuaz Box: Center x ~516, y ~416 to ~516) — 15px AŞAĞI KAYDIRILDI
+      // --- 3. DIMENSIONS / ÖLÇÜLER (Turkuaz Box: Center x ~516, y ~416 to ~516)
       const dims = `${desi?.en || '0'}x${desi?.boy || '0'}x${desi?.yuk || '0'}`;
-      drawText(dims, 516, 470, { size: 30, weight: 'bold', align: 'center' });
+      drawText(dims, 516, 462, { size: 28, weight: 'bold', align: 'center' });
+      drawText('(EN x BOY x YÜKS.)', 516, 494, { size: 13, weight: 'bold', align: 'center' });
 
       // --- 4. WEIGHT / AĞIRLIK (Turuncu Box: Center x ~714, y ~408 to ~470) ---
-      const weightVal = String(desi?.kg || '0');
-      drawText(weightVal, 714, 435, { size: 32, weight: 'bold', align: 'center' });
+      const weightVal = `${desi?.kg || '0'} KG`;
+      drawText(weightVal, 714, 435, { size: 28, weight: 'bold', align: 'center' });
 
       // --- 5. DESI / HACİM (Pembe Box: Center x ~714, y ~524 to ~586) ---
       const desiVal = String(desi?.ucret !== null && desi?.ucret !== undefined ? desi.ucret : '0');
@@ -584,7 +585,7 @@ async function buildLabel(data, customTemplateBase64, copies) {
 
   // Telefon
   if (alici?.tel) {
-    drawText(`☎  ${alici.tel}`, PAD, recY, { size: 23 });
+    drawText(`☎  ${alici.tel}`, PAD, recY + 4, { size: 23, weight: 'bold' });
   }
 
   // İl/İlçe — büyük, sağa dayalı, altta (kargo sınıflandırma için kritik)
