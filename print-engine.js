@@ -377,11 +377,11 @@ async function buildLabel(data, customTemplateBase64, copies) {
       const recNameSize = fitFont(recName, 360, 36, 22, 'bold');
       drawText(recName, 16, 335, { size: recNameSize, weight: 'bold' });
       
-      let recY = 335 + recNameSize * 1.3 + 6;
-      recY = drawWrapped(alici?.adres || '', 16, recY, 360, 23, 'normal', 28);
+      let recY = 335 + recNameSize + 18;
+      recY = drawWrapped(alici?.adres || '', 16, recY, 360, 24, 'normal', 30);
       
       if (alici?.tel) {
-        drawText(alici.tel, 16, recY + 16, { size: 22, weight: 'bold' });
+        drawText(alici.tel, 16, recY + 18, { size: 23, weight: 'bold' });
       }
 
       const cityStr = [alici?.ilce, alici?.il].filter(Boolean).join(' / ').toLocaleUpperCase('tr-TR');
