@@ -372,84 +372,26 @@ async function buildLabel(data, customTemplateBase64, copies) {
       const senderText = [gonderici?.adres, gonderici?.tel].filter(Boolean).join(' - ');
       drawWrapped(senderText, 16, 188, 450, 20, 'normal', 24);
 
-      // --- İkon Çizim Yardımcıları (Siyah, Dolu Vektörel) ---
-      function drawBuildingIcon(x, y, s = 22) {
-        ctx.fillStyle = C.BLACK;
-        // Ana bina gövdesi
-        ctx.fillRect(x, y + s * 0.2, s * 0.7, s * 0.8);
-        // Yan eklenti bina
-        ctx.fillRect(x + s * 0.7, y + s * 0.45, s * 0.3, s * 0.55);
-        // Üst üçgen/çatı süsü
-        ctx.beginPath();
-        ctx.moveTo(x, y + s * 0.2);
-        ctx.lineTo(x + s * 0.35, y);
-        ctx.lineTo(x + s * 0.7, y + s * 0.2);
-        ctx.fill();
-        // Pencereler (beyaz kareler)
-        ctx.fillStyle = C.WHITE;
-        const pw = s * 0.12, ph = s * 0.12;
-        ctx.fillRect(x + s * 0.14, y + s * 0.32, pw, ph);
-        ctx.fillRect(x + s * 0.42, y + s * 0.32, pw, ph);
-        ctx.fillRect(x + s * 0.14, y + s * 0.54, pw, ph);
-        ctx.fillRect(x + s * 0.42, y + s * 0.54, pw, ph);
-        ctx.fillRect(x + s * 0.76, y + s * 0.58, pw, ph);
-        // Kapı
-        ctx.fillRect(x + s * 0.25, y + s * 0.75, s * 0.2, s * 0.25);
-        ctx.fillStyle = C.BLACK;
-      }
-
-      function drawPinIcon(x, y, s = 22) {
-        ctx.fillStyle = C.BLACK;
-        ctx.beginPath();
-        // Damla / lokasyon pini
-        const r = s * 0.36;
-        const cx = x + s * 0.45;
-        const cy = y + r + 2;
-        ctx.arc(cx, cy, r, Math.PI * 0.8, Math.PI * 0.2, true);
-        ctx.lineTo(cx, y + s);
-        ctx.closePath();
-        ctx.fill();
-        // İçteki beyaz daire
-        ctx.fillStyle = C.WHITE;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = C.BLACK;
-      }
-
-      function drawPhoneIcon(x, y, s = 22) {
-        ctx.fillStyle = C.BLACK;
-        // Telefon ahizesi (dolu ikon)
-        const cx = x + s * 0.5;
-        const cy = y + s * 0.5;
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(-Math.PI / 4);
-        // Ahize gövdesi
-        ctx.beginPath();
-        ctx.roundRect(-s * 0.16, -s * 0.45, s * 0.32, s * 0.9, s * 0.15);
-        ctx.fill();
-        // Üst kulaklık
-        ctx.beginPath();
-        ctx.arc(0, -s * 0.35, s * 0.28, 0, Math.PI * 2);
-        ctx.fill();
-        // Alt mikrofon
-        ctx.beginPath();
-        ctx.arc(0, s * 0.35, s * 0.28, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+      // --- İkonları Yükle ---
+      let buildingImg, pinImg, phoneImg;
+      try {
+        buildingImg = await loadImg('building-user.png');
+        pinImg = await loadImg('marker.png');
+        phoneImg = await loadImg('phone-call.png');
+      } catch(e) {
+        console.warn('İkonlar yüklenemedi', e);
       }
 
       // --- 2. RECEIVER DETAILS (Kırmızı Box: x ~16 to ~380, y ~328 to ~640) ---
       // 2.1. Firma Ünvanı + Bina İkonu
       const recName = alici?.unvan || alici?.ad || '';
       const recNameSize = fitFont(recName, 325, 34, 20, 'bold');
-      drawBuildingIcon(16, 335 + 2, 24);
+      if (buildingImg) ctx.drawImage(buildingImg, 16, 335, 24, 24);
       drawText(recName, 46, 335, { size: recNameSize, weight: 'bold' });
       
       // 2.2. Adres + Lokasyon Pini İkonu
       let recY = 335 + recNameSize + 16;
-      drawPinIcon(16, recY + 2, 24);
+      if (pinImg) ctx.drawImage(pinImg, 16, recY, 24, 24);
       recY = drawWrapped(alici?.adres || '', 46, recY, 330, 24, 'normal', 30);
       
       // 2.3. İLÇE / İL (Telefon numarasının eski yerine taşındı)
@@ -460,7 +402,7 @@ async function buildLabel(data, customTemplateBase64, copies) {
 
       // 2.4. TELEFON NUMARASI + Telefon İkonu (İl/İlçe'nin eski yerine, en alta taşındı)
       if (alici?.tel) {
-        drawPhoneIcon(16, 570 + 4, 28);
+        if (phoneImg) ctx.drawImage(phoneImg, 16, 570, 28, 28);
         drawText(alici.tel, 50, 570, { size: 30, weight: 'bold' });
       }
 
