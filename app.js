@@ -1897,7 +1897,7 @@ const RecentPrints = {
     container.innerHTML = list.map(item => `
       <div class="recent-print-item">
         <div class="recent-print-code">${escapeHtml(item.tkgCode)}</div>
-        <div class="recent-print-customer">kullanılan müşteri : <strong>${escapeHtml(item.customer)}</strong></div>
+        <div class="recent-print-customer">${escapeHtml(item.customer)}</div>
         <div class="recent-print-meta">
           <span class="recent-print-time">${escapeHtml(item.time || '')}</span>
         </div>
