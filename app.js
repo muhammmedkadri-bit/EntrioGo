@@ -646,6 +646,11 @@ const Slip = {
       await window.PrintEngine.printShippingLabel(labelData, copies);
       Toast.show('Etiket başarıyla yazıcıya gönderildi.', 'success');
       
+      // Son kullanılan kargo kodunu listeye ekle
+      if (typeof RecentPrints !== 'undefined' && RecentPrints.add) {
+        RecentPrints.add(tkg, formData.unvan || formData.ad || 'Bilinmeyen Müşteri');
+      }
+
       // Sayaç ve istatistikleri güncelle
       State.print_count += copies;
       Store.savePrintCount();
@@ -1824,3 +1829,91 @@ const PrinterSettings = {
 };
 window.PrinterSettings = PrinterSettings;
 
+/* ────────────────────────────────────────
+   RECENT PRINTS (Son Yazdırmalar)
+──────────────────────────────────────── */
+const RecentPrints = {
+  STORAGE_KEY: 'cb_print_history',
+  MAX_ITEMS: 5,
+
+  getAll() {
+    try {
+      const raw = localStorage.getItem(this.STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error('Recent prints read error:', e);
+      return [];
+    }
+  },
+
+  add(tkgCode, customerName) {
+    if (!tkgCode) return;
+    try {
+      const list = this.getAll();
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      const dateStr = now.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+
+      // Başa ekle
+      list.unshift({
+        tkgCode: tkgCode.trim(),
+        customer: (customerName || 'Bilinmeyen Müşteri').trim(),
+        time: `${dateStr} ${timeStr}`,
+        timestamp: Date.now()
+      });
+
+      // En fazla 5 kayıt tut
+      const trimmed = list.slice(0, this.MAX_ITEMS);
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(trimmed));
+      this.render();
+    } catch (e) {
+      console.error('Recent prints save error:', e);
+    }
+  },
+
+  render() {
+    const container = document.getElementById('recent-prints-list');
+    if (!container) return;
+
+    const list = this.getAll();
+    if (list.length === 0) {
+      container.innerHTML = `
+        <div class="recent-print-empty">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0a2.25 2.25 0 01-2.24 2.156H8.58A2.25 2.25 0 016.34 18m11.32 0h-11.32" />
+          </svg>
+          Henüz yazdırma yapılmadı.
+        </div>
+      `;
+      return;
+    }
+
+    const escapeHtml = (str) => {
+      const d = document.createElement('div');
+      d.textContent = str || '';
+      return d.innerHTML;
+    };
+
+    container.innerHTML = list.map(item => `
+      <div class="recent-print-item">
+        <div class="recent-print-code">${escapeHtml(item.tkgCode)}</div>
+        <div class="recent-print-customer">kullanılan müşteri : <strong>${escapeHtml(item.customer)}</strong></div>
+        <div class="recent-print-meta">
+          <span class="recent-print-time">${escapeHtml(item.time || '')}</span>
+        </div>
+      </div>
+    `).join('');
+  },
+
+  init() {
+    this.render();
+  }
+};
+window.RecentPrints = RecentPrints;
+
+// Sayfa yüklendiğinde başlat
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => RecentPrints.init());
+} else {
+  RecentPrints.init();
+}

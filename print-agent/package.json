@@ -8,8 +8,8 @@
     "install-service": "node install-service.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
   },
   "optionalDependencies": {
     "node-windows": "^1.0.0-beta.8"

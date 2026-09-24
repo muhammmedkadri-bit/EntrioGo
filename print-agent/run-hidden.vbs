@@ -3,9 +3,17 @@
 '
 ' Kurulum: Bu dosyanın kısayolunu shell:startup klasörüne koy.
 
-Dim scriptDir
-scriptDir = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
+Dim fso, scriptDir, nodeExe
+Set fso = CreateObject("Scripting.FileSystemObject")
+scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
+
+nodeExe = "node.exe"
+If fso.FileExists("C:\Program Files\nodejs\node.exe") Then
+    nodeExe = "C:\Program Files\nodejs\node.exe"
+ElseIf fso.FileExists("C:\Program Files (x86)\nodejs\node.exe") Then
+    nodeExe = "C:\Program Files (x86)\nodejs\node.exe"
+End If
 
 Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = scriptDir
-WshShell.Run """C:\Program Files\nodejs\node.exe"" """ & scriptDir & "\server.js""", 0, False
+WshShell.Run """" & nodeExe & """ """ & scriptDir & "\server.js""", 0, False

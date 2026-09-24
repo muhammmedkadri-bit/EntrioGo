@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+  <script>
+    if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      location.replace('https:' + location.href.substring(location.protocol.length));
+    }
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>EntrioGo</title>
@@ -401,6 +406,29 @@
               Etiketi Yazdır
             </button>
 
+          </div>
+        </div>
+
+        <!-- ─── THIRD COLUMN: Son Yazdırmalar ─── -->
+        <div class="recent-prints-card card">
+          <div class="card-header">
+            <span class="card-title">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Son Yazdırmalar
+            </span>
+          </div>
+          <div class="card-body">
+            <div id="recent-prints-list" class="recent-print-list">
+              <!-- JS tarafından doldurulacak -->
+              <div class="recent-print-empty">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0a2.25 2.25 0 01-2.24 2.156H8.58A2.25 2.25 0 016.34 18m11.32 0h-11.32" />
+                </svg>
+                Henüz yazdırma yapılmadı.
+              </div>
+            </div>
           </div>
         </div>
 

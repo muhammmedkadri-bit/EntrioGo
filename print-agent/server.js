@@ -37,6 +37,8 @@ function loadConfig() {
     // Bu siteler dışından gelen istekler reddedilir (güvenlik).
     allowedOrigins: [
       'https://cargobar.vercel.app',
+      'https://entriotr.xyz',
+      'http://entriotr.xyz',
       'http://localhost:5500',
       'http://127.0.0.1:5500',
       'http://localhost:3000',
@@ -63,46 +65,33 @@ app.use(express.json({ limit: '5mb' }));
 
 // ────────────────────────────────────────────────────────────────
 // CORS + Chrome Private Network Access (PNA) middleware
-// Chrome, public HTTPS sitesinden yerel IP'ye istek atarken
-// iki aşamalı preflight gönderir:
-//   1. OPTIONS isteği → Access-Control-Allow-Private-Network: true içermeli
-//   2. Asıl istek
-// Bu yüzden OPTIONS isteği cors() middleware'den ÖNCE yakalanmalı.
 // ────────────────────────────────────────────────────────────────
-const CORS_HEADERS = {
-  'Access-Control-Allow-Private-Network': 'true',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Print-Token, Access-Control-Request-Private-Network',
-  'Access-Control-Allow-Credentials': 'true',
-};
-
 function getAllowedOrigin(origin) {
   if (!origin) return '*';
   if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') ||
       origin.startsWith('https://localhost') || origin.startsWith('https://127.0.0.1')) return origin;
   if (config.allowedOrigins.includes(origin)) return origin;
-  if (origin.startsWith('https://')) return origin; // Güvenlik API token ile sağlanıyor
-  return null; // HTTP yabancı origin → reddet
+  if (origin.startsWith('https://')) return origin;
+  return null;
 }
 
-// Tüm isteklere origin header'ı ekle
 app.use((req, res, next) => {
   const origin = req.headers['origin'];
   const allowed = getAllowedOrigin(origin);
 
   if (allowed) {
     res.setHeader('Access-Control-Allow-Origin', allowed);
-    if (allowed !== '*') res.setHeader('Vary', 'Origin');
+    if (allowed !== '*') {
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
   }
 
-  // PNA header'ı her zaman ekle (OPTIONS için zorunlu)
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
 
-  // OPTIONS preflight → diğer header'ları ekle ve hemen bitir
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Methods', CORS_HEADERS['Access-Control-Allow-Methods']);
-    res.setHeader('Access-Control-Allow-Headers', CORS_HEADERS['Access-Control-Allow-Headers']);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Print-Token, Access-Control-Request-Private-Network');
     res.setHeader('Access-Control-Max-Age', '86400');
     return res.status(204).end();
   }
@@ -126,8 +115,9 @@ app.get('/health', (req, res) => {
 // --- Kurulu/paylaşılan yazıcıları listele (Ayarlar ekranında seçim için) ---
 app.get('/printers', requireToken, (req, res) => {
   if (process.platform === 'win32') {
-    const psCmd = "Get-Printer | Select-Object Name,ShareName,Shared,DriverName | ConvertTo-Json";
-    execFile('powershell.exe', ['-NoProfile', '-Command', psCmd], (err, stdout) => {
+    const psCmd = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Printer | Select-Object Name,ShareName,Shared,DriverName | ConvertTo-Json";
+    const encodedCmd = Buffer.from(psCmd, 'utf16le').toString('base64');
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedCmd], { encoding: 'utf8' }, (err, stdout) => {
       if (err) return res.status(500).json({ ok: false, error: err.message });
       let list;
       try { list = JSON.parse(stdout); } catch { list = []; }
@@ -148,38 +138,30 @@ function printBuffer(buffer, cb) {
   const tmpFile = path.join(os.tmpdir(), `cargobar-${Date.now()}-${Math.random().toString(36).slice(2)}.prn`);
   fs.writeFileSync(tmpFile, buffer);
 
+  const cleanup = () => {
+    try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch(e) {}
+  };
+
   if (process.platform === 'win32') {
-    // Yazıcı adını config'den al (paylaşım adı değil, kurulu yazıcı adı)
     const printerName = config.windowsPrinterName || config.windowsShareName || 'Etiket Yazıcı';
     
-    // PowerShell ile doğrudan RAW yazdırma — Print Spooler paylaşım yoluna gerek yok
     const psScript = `
+$ProgressPreference = 'SilentlyContinue';
+$WarningPreference = 'SilentlyContinue';
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
 $printerName = '${printerName.replace(/'/g, "''")}';
 $tmpFile = '${tmpFile.replace(/\\/g, '\\\\')}';
-Add-Type -AssemblyName System.Drawing;
-$pd = New-Object System.Drawing.Printing.PrintDocument;
-$pd.PrinterSettings.PrinterName = $printerName;
-$pd.PrinterSettings.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('Custom', 394, 394);
-$rawData = [System.IO.File]::ReadAllBytes($tmpFile);
-$sent = $false;
-$pd.add_PrintPage({
-  param($sender, $e)
-  if (-not $sent) {
-    $sent = $true;
-    $e.Cancel = $true;
-  }
-});
-# RAW yazdırma için doğrudan spooler API kullan
+
 $pinvoke = @'
 using System;
 using System.Runtime.InteropServices;
 public class RawPrinter {
-  [DllImport("winspool.Drv", EntryPoint="OpenPrinterA", SetLastError=true, CharSet=CharSet.Ansi)]
+  [DllImport("winspool.Drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
   public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
   [DllImport("winspool.Drv", EntryPoint="ClosePrinter", SetLastError=true)]
   public static extern bool ClosePrinter(IntPtr hPrinter);
-  [DllImport("winspool.Drv", EntryPoint="StartDocPrinterA", SetLastError=true, CharSet=CharSet.Ansi)]
-  public static extern int StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+  [DllImport("winspool.Drv", EntryPoint="StartDocPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern int StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOW di);
   [DllImport("winspool.Drv", EntryPoint="EndDocPrinter", SetLastError=true)]
   public static extern bool EndDocPrinter(IntPtr hPrinter);
   [DllImport("winspool.Drv", EntryPoint="StartPagePrinter", SetLastError=true)]
@@ -188,12 +170,12 @@ public class RawPrinter {
   public static extern bool EndPagePrinter(IntPtr hPrinter);
   [DllImport("winspool.Drv", EntryPoint="WritePrinter", SetLastError=true)]
   public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, int dwCount, out int dwWritten);
-  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]
-  public class DOCINFOA { public string pDocName; public string pOutputFile; public string pDataType; }
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public class DOCINFOW { public string pDocName; public string pOutputFile; public string pDataType; }
   public static bool SendBytesToPrinter(string printerName, byte[] bytes) {
     IntPtr hPrinter; int written;
     if (!OpenPrinter(printerName, out hPrinter, IntPtr.Zero)) return false;
-    var di = new DOCINFOA { pDocName="CargobarLabel", pOutputFile=null, pDataType="RAW" };
+    var di = new DOCINFOW { pDocName="CargobarLabel", pOutputFile=null, pDataType="RAW" };
     if (StartDocPrinter(hPrinter, 1, di) == 0) { ClosePrinter(hPrinter); return false; }
     StartPagePrinter(hPrinter);
     IntPtr ptr = Marshal.AllocCoTaskMem(bytes.Length);
@@ -214,19 +196,30 @@ Remove-Item $tmpFile -ErrorAction SilentlyContinue;
 if ($ok) { Write-Output 'OK' } else { Write-Error ('RAW print failed for printer: ' + $printerName); exit 1 }
 `.trim();
 
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], { timeout: 15000 }, (err, stdout, stderr) => {
-      fs.unlink(tmpFile, () => {});
-      if (err || (stderr && stderr.trim())) {
-        const msg = stderr?.trim() || err?.message || 'Bilinmeyen yazdırma hatası';
+    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
+
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedScript], { timeout: 15000 }, (err, stdout, stderr) => {
+      cleanup();
+      const out = (stdout || '').trim();
+      const cleanErr = (stderr || '').replace(/#<\s*CLIXML[\s\S]*$/gi, '').trim();
+
+      if (out.includes('OK') || out.endsWith('OK')) {
+        console.log('[print] Başarılı:', out);
+        return cb(null);
+      }
+
+      if (err || cleanErr) {
+        const msg = cleanErr || err?.message || out || 'Bilinmeyen yazdırma hatası';
         console.error('[print] Windows RAW hata:', msg);
         return cb(msg);
       }
-      console.log('[print] Başarılı:', stdout.trim());
+      
+      console.log('[print] Başarılı:', out);
       cb(null);
     });
   } else {
     execFile('lp', ['-d', config.cupsPrinterName, '-o', 'raw', tmpFile], (err, stdout, stderr) => {
-      fs.unlink(tmpFile, () => {});
+      cleanup();
       cb(err ? (stderr || err.message) : null);
     });
   }
@@ -278,8 +271,8 @@ app.post('/test/:lang', requireToken, (req, res) => {
 
 const https = require('https');
 const options = {
-  key: fs.readFileSync(path.join(__dirname, '192.168.1.156+2-key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, '192.168.1.156+2.pem'))
+  key: fs.readFileSync(path.join(__dirname, 'server.key')),
+  cert: fs.readFileSync(path.join(__dirname, 'server.crt'))
 };
 
 https.createServer(options, app).listen(config.port, '0.0.0.0', () => {
