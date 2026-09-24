@@ -485,8 +485,9 @@ input[type="number"] { -moz-appearance: textfield; }
 
 .recent-print-item {
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
   padding: 0.75rem 0.9rem;
   background: var(--muted);
   border: 1px solid var(--border);
@@ -496,19 +497,36 @@ input[type="number"] { -moz-appearance: textfield; }
   overflow: hidden;
 }
 
-.recent-print-item::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--primary);
-  opacity: 0.6;
-  border-radius: 2px 0 0 2px;
-}
-
 .recent-print-item:hover {
   border-color: rgba(126,217,87,0.35);
   box-shadow: 0 0 0 2px rgba(126,217,87,0.07);
+}
+
+.recent-print-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+.recent-print-check svg {
+  width: 15px;
+  height: 15px;
+}
+
+.recent-print-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .recent-print-code {

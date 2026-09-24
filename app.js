@@ -1896,10 +1896,17 @@ const RecentPrints = {
 
     container.innerHTML = list.map(item => `
       <div class="recent-print-item">
-        <div class="recent-print-code">${escapeHtml(item.tkgCode)}</div>
-        <div class="recent-print-customer">${escapeHtml(item.customer)}</div>
-        <div class="recent-print-meta">
-          <span class="recent-print-time">${escapeHtml(item.time || '')}</span>
+        <div class="recent-print-check" title="Yazdırıldı">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        </div>
+        <div class="recent-print-content">
+          <div class="recent-print-code">${escapeHtml(item.tkgCode)}</div>
+          <div class="recent-print-customer">${escapeHtml(item.customer)}</div>
+          <div class="recent-print-meta">
+            <span class="recent-print-time">${escapeHtml(item.time || '')}</span>
+          </div>
         </div>
       </div>
     `).join('');
